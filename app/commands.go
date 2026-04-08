@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"strings"
+	"time"
 )
 
 func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) error {
@@ -25,10 +26,27 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 			con.Write([]byte(val))
 		case "SET":
-			if len(cmd_arr) != 3 {
-				return NewError("SET accepts exactly 2 arguments")
+			if len(cmd_arr) < 3 {
+				return NewError("SET accepts atleast 2 arguments")
 			}
 			key, ok := cmd_arr[1].(string)
+			duration := -1 * time.Second
+			if len(cmd_arr) == 5 {
+				str, ok := cmd_arr[3].(string)
+				if ok {
+					num, ok := cmd_arr[4].(int)
+					if ok {
+						str = strings.ToUpper(str)
+						switch str {
+						case "PX":
+							duration = time.Duration(num) * time.Millisecond
+						case "EX":
+							duration = time.Duration(num) * time.Second
+						default:
+						}
+					}
+				}
+			}
 			if !ok {
 				return NewError("couldn't resolve key")
 			}
@@ -37,6 +55,8 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				key:   key,
 				value: cmd_arr[2],
 				to:    con,
+				timestamp: time.Now(),
+				expiry: duration,
 			}
 		case "GET":
 			if len(cmd_arr) != 2 {
@@ -51,6 +71,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				key:   key,
 				value: nil,
 				to:    con,
+				timestamp: time.Now(),
 			}
 		default:
 			return NewError("unrecognised cmd")
