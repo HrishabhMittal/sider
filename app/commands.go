@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,7 +35,11 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			if len(cmd_arr) == 5 {
 				str, ok := cmd_arr[3].(string)
 				if ok {
-					num, ok := cmd_arr[4].(int)
+					str_num, ok := cmd_arr[4].(string)
+					num, err := strconv.Atoi(str_num)
+					if err != nil {
+						return err
+					}
 					if ok {
 						str = strings.ToUpper(str)
 						switch str {
