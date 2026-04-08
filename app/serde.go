@@ -33,7 +33,7 @@ const (
 	VERBATIM_STRING = '='
 	MAP             = '%'
 	ATTRIBUTE       = '|'
-	SET             = '~'
+	SET_            = '~'
 	PUSH            = '>'
 )
 
@@ -106,8 +106,11 @@ func (r *RespReader) decodeArray(length int) ([]any, error) {
 	}
 	return ret, nil
 }
+
+const NULL_BULK_STRING = "$-1\r\n"
+
 func encodeSimpleString(str string) string {
-	return "+"+str+"\r\n"
+	return "+" + str + "\r\n"
 }
 func encodeObj(obj any) (string, error) {
 	str := ""
