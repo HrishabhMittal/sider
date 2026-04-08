@@ -106,7 +106,9 @@ func (r *RespReader) decodeArray(length int) ([]any, error) {
 	}
 	return ret, nil
 }
-
+func encodeSimpleString(str string) string {
+	return "+"+str+"\r\n"
+}
 func encodeObj(obj any) (string, error) {
 	str := ""
 	switch v := obj.(type) {

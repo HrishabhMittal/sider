@@ -18,7 +18,7 @@ func handleCommand(cmd_arr []any) (string, error) {
 	if ok {
 		switch cmd {
 		case "PING":
-			return encodeObj(any("PONG"))
+			return encodeSimpleString("PONG"),nil
 		case "ECHO":
 			if len(cmd_arr) != 2 {
 				return "", NewError("ECHO accepts exactly 1 argument")
