@@ -35,11 +35,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			if len(cmd_arr) == 5 {
 				str, ok := cmd_arr[3].(string)
 				if ok {
-					str_num, ok := cmd_arr[4].(string)
-					num, err := strconv.Atoi(str_num)
-					if err != nil {
-						return err
-					}
+					num, ok := cmd_arr[4].(int)
 					if ok {
 						str = strings.ToUpper(str)
 						switch str {
