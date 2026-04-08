@@ -33,7 +33,7 @@ func handleStorage(cmds chan storage_cmd) {
 			val, ok := storage[v.key]
 			if !ok {
 				v.to.Write([]byte(NULL_BULK_STRING))
-			} else if v.timestamp.Add(v.expiry).Compare(time.Now()) != 1 {
+			} else if val.expiry <= 0 || val.timestamp.Add(val.expiry).Compare(v.timestamp) != 1 {
 				delete(storage, v.key)
 				v.to.Write([]byte(NULL_BULK_STRING))
 			} else {
