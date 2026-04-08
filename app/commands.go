@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,8 +35,12 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			if len(cmd_arr) == 5 {
 				str, ok := cmd_arr[3].(string)
 				if ok {
-					num, ok := cmd_arr[4].(int)
+					str_num, ok := cmd_arr[4].(string)
 					if ok {
+						num, err := strconv.Atoi(str_num)
+						if err != nil {
+							return err
+						}
 						str = strings.ToUpper(str)
 						switch str {
 						case "PX":
@@ -51,12 +56,12 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				return NewError("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
-				cmd:   SET,
-				key:   key,
-				value: cmd_arr[2],
-				to:    con,
+				cmd:       SET,
+				key:       key,
+				value:     cmd_arr[2],
+				to:        con,
 				timestamp: time.Now(),
-				expiry: duration,
+				expiry:    duration,
 			}
 		case "GET":
 			if len(cmd_arr) != 2 {
@@ -67,10 +72,10 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				return NewError("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
-				cmd:   GET,
-				key:   key,
-				value: nil,
-				to:    con,
+				cmd:       GET,
+				key:       key,
+				value:     nil,
+				to:        con,
 				timestamp: time.Now(),
 			}
 		default:
