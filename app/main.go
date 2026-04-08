@@ -3,36 +3,53 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strings"
 )
 
+func handleCommand(cmd_arr []any) (string, error) {
+	if len(cmd_arr) <= 0 {
+		return "", NewError("command too short")
+	}
+	cmd, ok := cmd_arr[0].(string)
+	cmd = strings.ToUpper(cmd)
+	if ok {
+		switch cmd {
+		case "PING":
+			return encodeObj(any("PONG"))
+		case "ECHO":
+			if len(cmd_arr) != 2 {
+				return "", NewError("ECHO accepts exactly 1 argument")
+			}
+			return encodeObj(cmd_arr[1])
+		default:
+			return "", NewError("unrecognised cmd")
+		}
+	} else {
+		return "", NewError("cmd not of type string")
+	}
+}
 func handleConnection(con net.Conn) {
 	defer con.Close()
 	reader := NewRespReader(bufio.NewReader(con))
 	for {
 		obj, err := reader.decodeObj()
 		if err != nil {
-			fmt.Println("Error: ", err)
+			if err != io.EOF {
+				fmt.Println("Error: ", err)
+			}
 			return
 		}
 		switch v := obj.(type) {
 		case []any:
-			if len(v) <= 0 {
-				continue
-			}
-			cmd, ok := v[0].(string)
-			if ok {
-				if cmd=="PING" {
-					con.Write([]byte("+PONG\r\n"))
-				} else {
-					fmt.Println("error: unrecognised cmd")
-					return
-				}
-			} else {
-				fmt.Println("error: cmd not of type string")
+			resp, err := handleCommand(v)
+			if err != nil {
+				fmt.Println("Error: ", err)
 				return
 			}
+			con.Write([]byte(resp))
 		}
 	}
 }

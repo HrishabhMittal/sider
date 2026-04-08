@@ -6,16 +6,16 @@ import (
 	"strconv"
 )
 
-type DecodingError struct {
+type Error struct {
 	message string
 }
 
-func NewDecodingError(message string) *DecodingError {
-	return &DecodingError{
+func NewError(message string) *Error {
+	return &Error{
 		message,
 	}
 }
-func (e *DecodingError) Error() string {
+func (e *Error) Error() string {
 	return fmt.Sprintf("decoding error: %s", e.message)
 }
 
@@ -47,26 +47,17 @@ func NewRespReader(Reader *bufio.Reader) RespReader {
 	}
 }
 
-type RespWriter struct {
-	*bufio.Writer
-}
-
-func NewRespWriter(Writer *bufio.Writer) RespWriter {
-	return RespWriter{
-		Writer,
-	}
-}
 func (r *RespReader) decodeLine() (string, error) {
 	line, err := r.Reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
 	if len(line) < 3 {
-		return "", NewDecodingError("string not long enough")
+		return "", NewError("string not long enough")
 	}
 	end := line[len(line)-2:]
 	if end != "\r\n" {
-		return "", NewDecodingError("string doesnt end in \\r\\n")
+		return "", NewError("string doesnt end in \\r\\n")
 	}
 	return line[:len(line)-2], nil
 }
@@ -102,7 +93,7 @@ func (r *RespReader) decodeBulkString(length int) (string, error) {
 	if len(line) == length {
 		return line, nil
 	}
-	return "", NewDecodingError("bulk string length doesn't match")
+	return "", NewError("bulk string length doesn't match")
 }
 func (r *RespReader) decodeArray(length int) ([]any, error) {
 	ret := make([]any, 0, length)
@@ -114,4 +105,28 @@ func (r *RespReader) decodeArray(length int) ([]any, error) {
 		ret = append(ret, obj)
 	}
 	return ret, nil
+}
+
+func encodeObj(obj any) (string, error) {
+	str := ""
+	switch v := obj.(type) {
+	case int:
+		str = string(INTEGER) + fmt.Sprintf("%v", v) + "\r\n"
+	case string:
+		str = string(BULK_STRING) + fmt.Sprintf("%v", len(v)) + "\r\n" + v + "\r\n"
+	case []any:
+		str = string(ARRAY) + fmt.Sprintf("%v", len(v)) + "\r\n"
+		for _, i := range v {
+			val, err := encodeObj(i)
+			if err != nil {
+				return "", err
+			}
+			str += val
+		}
+	}
+	if str == "" {
+		return str, NewError("couldn't serialise object due to unexpected type")
+	} else {
+		return str, nil
+	}
 }
