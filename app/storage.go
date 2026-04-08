@@ -37,7 +37,7 @@ func handleStorage(cmds chan storage_cmd) {
 				delete(storage, v.key)
 				v.to.Write([]byte(NULL_BULK_STRING))
 			} else {
-				str, _ := encodeObj(val)
+				str, _ := encodeObj(val.value)
 				v.to.Write([]byte(str))
 			}
 		case SET:
