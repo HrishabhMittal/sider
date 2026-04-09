@@ -97,11 +97,14 @@ func handleStorage(cmds chan storage_cmd) {
 				return
 			}
 			if arr, ok := val.value.([]any); ok {
-				if low < 0 || low >= len(arr) || high < 0 || high >= len(arr) || low > high {
+				if low < 0 || low >= len(arr) || high < 0 || low > high {
 					v.to.Write([]byte(EMPTY_ARR))
 					return
 				}
 				high += 1
+				if high > len(arr) {
+					high = len(arr)
+				}
 				obj, err := encodeObj(arr[low:high])
 				if err != nil {
 					v.to.Write([]byte(encodeSimpleError("COULDNT ENCODE OBJECT")))
