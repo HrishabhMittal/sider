@@ -110,7 +110,11 @@ func (r *RespReader) decodeArray(length int) ([]any, error) {
 const NULL_BULK_STRING = "$-1\r\n"
 
 func encodeSimpleString(str string) string {
-	return "+" + str + "\r\n"
+	return string(SIMPLE_STR) + str + "\r\n"
+}
+
+func encodeSimpleError(str string) string {
+	return string(SIMPLE_ERR) + str + "\r\n"
 }
 func encodeObj(obj any) (string, error) {
 	str := ""
