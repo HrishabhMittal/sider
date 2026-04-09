@@ -89,17 +89,17 @@ func handleStorage(cmds chan storage_cmd) {
 			low, err := strconv.Atoi(v.value.([]any)[0].(string))
 			if err != nil {
 				v.to.Write([]byte(encodeSimpleError("COULDNT CONVERT LOW TO INT")))
-				return
+				continue
 			}
 			high, err := strconv.Atoi(v.value.([]any)[1].(string))
 			if err != nil {
 				v.to.Write([]byte(encodeSimpleError("COULDNT CONVERT HIGH TO INT")))
-				return
+				continue
 			}
 			if arr, ok := val.value.([]any); ok {
 				if low < 0 || low >= len(arr) || high < 0 || low > high {
 					v.to.Write([]byte(EMPTY_ARR))
-					return
+					continue
 				}
 				high += 1
 				if high > len(arr) {
@@ -108,9 +108,11 @@ func handleStorage(cmds chan storage_cmd) {
 				obj, err := encodeObj(arr[low:high])
 				if err != nil {
 					v.to.Write([]byte(encodeSimpleError("COULDNT ENCODE OBJECT")))
-					return
+					continue
 				}
 				v.to.Write([]byte(obj))
+			} else {
+				v.to.Write([]byte("COULDNT DECODE ARRAY"))
 			}
 		default:
 			v.to.Write([]byte(NULL_BULK_STRING))
