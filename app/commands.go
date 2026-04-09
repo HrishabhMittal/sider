@@ -102,7 +102,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				return NewError("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
-				cmd:       RPUSH,
+				cmd:       LPUSH,
 				key:       key,
 				value:     cmd_arr[2:],
 				to:        con,

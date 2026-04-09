@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -70,7 +71,9 @@ func handleStorage(cmds chan storage_cmd) {
 			}
 			val, ok = storage[v.key]
 			if arr, ok := val.value.([]any); ok {
-				arr = append(v.value.([]any),arr...)
+				arg_arr := v.value.([]any)
+				slices.Reverse(arg_arr)
+				arr = append(arg_arr, arr...)
 				obj, err := encodeObj(len(arr))
 				val.value = arr
 				storage[v.key] = val

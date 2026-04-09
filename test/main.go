@@ -33,12 +33,9 @@ func main() {
 	defer con.Close()
 
 	cmds := [][]string{
-		{"RPUSH", "strawberry", "grape", "strawberry", "banana", "orange", "apple"},
-		{"LRANGE", "strawberry", "0", "3"},
-		{"LRANGE", "strawberry", "3", "4"},
-		{"LRANGE", "strawberry", "0", "4"},
-		{"LRANGE", "strawberry", "1", "0"},
-		{"LRANGE", "strawberry", "0", "10"},
+		{"LPUSH", "apple", "grape"},
+		{"LPUSH", "apple", "orange", "rasberry"},
+		{"LRANGE", "apple", "0", "-1"},
 	}
 	buf := make([]byte, 4096) // nobody cares
 	for i, v := range cmds {
