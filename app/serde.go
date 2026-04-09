@@ -108,7 +108,7 @@ func (r *RespReader) decodeArray(length int) ([]any, error) {
 }
 
 const NULL_BULK_STRING = "$-1\r\n"
-
+const EMPTY_ARR = "*0\r\n"
 func encodeSimpleString(str string) string {
 	return string(SIMPLE_STR) + str + "\r\n"
 }
