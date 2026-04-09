@@ -59,10 +59,10 @@ func handleStorage(cmds chan storage_cmd) {
 			}
 			val, ok = storage[v.key]
 			if arr, ok := val.value.([]any); ok {
-				arr = append(arr, v.value)
+				arr = append(arr, v.value.([]any)...)
 				obj, err := encodeObj(len(arr))
 				val.value = arr
-        		storage[v.key] = val 
+				storage[v.key] = val
 				if err != nil {
 					v.to.Write([]byte(encodeSimpleError("INTERNAL ERROR")))
 				}

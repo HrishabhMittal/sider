@@ -79,8 +79,8 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				timestamp: time.Now(),
 			}
 		case "RPUSH":
-			if len(cmd_arr) != 3 {
-				return NewError("RPUSH accepts exactly 1 argument")
+			if len(cmd_arr) < 3 {
+				return NewError("RPUSH accepts more than 2 argument")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
@@ -89,7 +89,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			cmd_channel <- storage_cmd{
 				cmd:       RPUSH,
 				key:       key,
-				value:     cmd_arr[2],
+				value:     cmd_arr[2:],
 				to:        con,
 				timestamp: time.Now(),
 			}
