@@ -98,7 +98,19 @@ func handleStorage(cmds chan storage_cmd) {
 				continue
 			}
 			if arr, ok := val.value.([]any); ok {
-				if low < 0 || low >= len(arr) || high < 0 || low > high {
+				if low < 0 {
+					low += len(arr)
+				}
+				if low < 0 {
+					low = 0
+				}
+				if high < 0 {
+					high += len(arr)
+				}
+				if high < 0 {
+					high = 0
+				}
+				if low >= len(arr) || low > high {
 					v.to.Write([]byte(EMPTY_ARR))
 					continue
 				}
