@@ -84,7 +84,8 @@ func handleStorage(cmds chan storage_cmd) {
 		case LRANGE:
 			val, ok := storage[v.key]
 			if !ok {
-				v.to.Write([]byte(encodeSimpleError("KEY DOESNT EXIST")))
+				v.to.Write([]byte(EMPTY_ARR))
+				continue
 			}
 			low, err := strconv.Atoi(v.value.([]any)[0].(string))
 			if err != nil {
