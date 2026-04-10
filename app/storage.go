@@ -114,7 +114,6 @@ func handleStorage(cmds chan storage_cmd) {
 			var l int
 			if !ok {
 				l = 0
-				continue
 			} else {
 				if val, ok := val.value.([]any); ok {
 					l = len(val)
