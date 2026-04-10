@@ -16,6 +16,7 @@ const (
 	LPUSH
 	LRANGE
 	LLEN
+	LPOP
 )
 
 type storage_cmd struct {
@@ -108,6 +109,24 @@ func handleStorage(cmds chan storage_cmd) {
 				}
 			} else {
 				v.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
+			}
+		case LPOP:
+			val, ok := storage[v.key]
+			if !ok {
+				v.to.Write([]byte(NULL_BULK_STRING))
+			} else {
+				if arr, ok := val.value.([]any); ok {
+					obj, err := encodeObj(arr[0])
+					if err != nil {
+						v.to.Write([]byte(NULL_BULK_STRING))
+					} else {
+						v.to.Write([]byte(obj))
+						val.value = arr[1:]
+						storage[v.key] = val
+					}
+				} else {
+					v.to.Write([]byte(NULL_BULK_STRING))
+				}
 			}
 		case LLEN:
 			val, ok := storage[v.key]

@@ -108,6 +108,22 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				to:        con,
 				timestamp: time.Now(),
 			}
+
+		case "LPOP":
+			if len(cmd_arr) != 2 {
+				return NewError("LPOP accepts exactly 1 arguments")
+			}
+			key, ok := cmd_arr[1].(string)
+			if !ok {
+				return NewError("couldn't resolve key")
+			}
+			cmd_channel <- storage_cmd{
+				cmd:       LPOP,
+				key:       key,
+				value:     cmd_arr[2:],
+				to:        con,
+				timestamp: time.Now(),
+			}
 		case "LLEN":
 			if len(cmd_arr) != 2 {
 				return NewError("LLEN accepts exactly 1 arguments")
