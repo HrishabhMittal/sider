@@ -36,6 +36,7 @@ func main() {
 		{"LPUSH", "apple", "grape"},
 		{"LPUSH", "apple", "orange", "rasberry"},
 		{"LRANGE", "apple", "0", "-1"},
+		{"LLEN", "apple"},
 	}
 	buf := make([]byte, 4096) // nobody cares
 	for i, v := range cmds {

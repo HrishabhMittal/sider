@@ -15,6 +15,7 @@ const (
 	RPUSH
 	LPUSH
 	LRANGE
+	LLEN
 )
 
 type storage_cmd struct {
@@ -108,6 +109,25 @@ func handleStorage(cmds chan storage_cmd) {
 			} else {
 				v.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
 			}
+		case LLEN:
+			val, ok := storage[v.key]
+			var l int
+			if !ok {
+				l = 0
+				continue
+			} else {
+				if val, ok := val.value.([]any); ok {
+					l = len(val)
+				} else {
+					l = 0
+				}
+			}
+			obj, err := encodeObj(l)
+			if err != nil {
+				v.to.Write([]byte(encodeSimpleError("ERROR WHILE HANDLING LLEN\n")))
+				continue
+			}
+			v.to.Write([]byte(obj))
 		case LRANGE:
 			val, ok := storage[v.key]
 			if !ok {
