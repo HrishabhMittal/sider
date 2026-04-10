@@ -6,19 +6,6 @@ import (
 	"strconv"
 )
 
-type Error struct {
-	message string
-}
-
-func NewError(message string) *Error {
-	return &Error{
-		message,
-	}
-}
-func (e *Error) Error() string {
-	return fmt.Sprintf("decoding error: %s", e.message)
-}
-
 const (
 	SIMPLE_STR      = '+'
 	SIMPLE_ERR      = '-'
@@ -53,11 +40,11 @@ func (r *RespReader) decodeLine() (string, error) {
 		return "", err
 	}
 	if len(line) < 3 {
-		return "", NewError("string not long enough")
+		return "", fmt.Errorf("string not long enough")
 	}
 	end := line[len(line)-2:]
 	if end != "\r\n" {
-		return "", NewError("string doesnt end in \\r\\n")
+		return "", fmt.Errorf("string doesnt end in \\r\\n")
 	}
 	return line[:len(line)-2], nil
 }
@@ -93,7 +80,7 @@ func (r *RespReader) decodeBulkString(length int) (string, error) {
 	if len(line) == length {
 		return line, nil
 	}
-	return "", NewError("bulk string length doesn't match")
+	return "", fmt.Errorf("bulk string length doesn't match")
 }
 func (r *RespReader) decodeArray(length int) ([]any, error) {
 	ret := make([]any, 0, length)
@@ -109,6 +96,7 @@ func (r *RespReader) decodeArray(length int) ([]any, error) {
 
 const NULL_BULK_STRING = "$-1\r\n"
 const EMPTY_ARR = "*0\r\n"
+
 func encodeSimpleString(str string) string {
 	return string(SIMPLE_STR) + str + "\r\n"
 }
@@ -134,7 +122,7 @@ func encodeObj(obj any) (string, error) {
 		}
 	}
 	if str == "" {
-		return str, NewError("couldn't serialise object due to unexpected type")
+		return str, fmt.Errorf("couldn't serialise object due to unexpected type")
 	} else {
 		return str, nil
 	}

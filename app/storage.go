@@ -115,15 +115,34 @@ func handleStorage(cmds chan storage_cmd) {
 			if !ok {
 				v.to.Write([]byte(NULL_BULK_STRING))
 			} else {
+				optional := false
+				popped := 1
+				if arr, ok := v.value.([]any); ok {
+					if len(arr) == 1 {
+						optional = true
+						popped_str, _ := arr[0].(string)
+						var err error
+						popped, err = strconv.Atoi(popped_str)
+						if err != nil {
+							v.to.Write([]byte(encodeSimpleError("OPTIONAL ARG COULDNT BE RESOLVED")))
+							continue
+						}
+					}
+				}
 				if arr, ok := val.value.([]any); ok {
-					obj, err := encodeObj(arr[0])
-					if err != nil {
-						v.to.Write([]byte(NULL_BULK_STRING))
-					} else {
+					if popped > len(arr) {
+						popped = len(arr)
+					}
+					if !optional {
+						obj, _ := encodeObj(arr[0])
 						v.to.Write([]byte(obj))
 						val.value = arr[1:]
-						storage[v.key] = val
+					} else {
+						obj, _ := encodeObj(arr[0:popped])
+						v.to.Write([]byte(obj))
+						val.value = arr[popped:]
 					}
+					storage[v.key] = val
 				} else {
 					v.to.Write([]byte(NULL_BULK_STRING))
 				}

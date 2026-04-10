@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -9,7 +10,7 @@ import (
 
 func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) error {
 	if len(cmd_arr) <= 0 {
-		return NewError("command too short")
+		return fmt.Errorf("command too short")
 	}
 	cmd, ok := cmd_arr[0].(string)
 	cmd = strings.ToUpper(cmd)
@@ -19,7 +20,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			con.Write([]byte(encodeSimpleString("PONG")))
 		case "ECHO":
 			if len(cmd_arr) != 2 {
-				return NewError("ECHO accepts exactly 1 argument")
+				return fmt.Errorf("ECHO accepts exactly 1 argument")
 			}
 			val, err := encodeObj(cmd_arr[1])
 			if err != nil {
@@ -28,7 +29,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			con.Write([]byte(val))
 		case "SET":
 			if len(cmd_arr) < 3 {
-				return NewError("SET accepts atleast 2 arguments")
+				return fmt.Errorf("SET accepts atleast 2 arguments")
 			}
 			key, ok := cmd_arr[1].(string)
 			duration := -1 * time.Second
@@ -53,7 +54,7 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				}
 			}
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       SET,
@@ -65,11 +66,11 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 		case "GET":
 			if len(cmd_arr) != 2 {
-				return NewError("GET accepts exactly 1 argument")
+				return fmt.Errorf("GET accepts exactly 1 argument")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       GET,
@@ -80,11 +81,11 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 		case "RPUSH":
 			if len(cmd_arr) < 3 {
-				return NewError("RPUSH accepts more than 2 argument")
+				return fmt.Errorf("RPUSH accepts more than 2 argument")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       RPUSH,
@@ -95,11 +96,11 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 		case "LPUSH":
 			if len(cmd_arr) < 3 {
-				return NewError("RPUSH accepts more than 2 argument")
+				return fmt.Errorf("RPUSH accepts more than 2 argument")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       LPUSH,
@@ -110,12 +111,12 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 
 		case "LPOP":
-			if len(cmd_arr) != 2 {
-				return NewError("LPOP accepts exactly 1 arguments")
+			if len(cmd_arr) < 2 {
+				return fmt.Errorf("LPOP accepts more than 1 arguments")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       LPOP,
@@ -126,11 +127,11 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 		case "LLEN":
 			if len(cmd_arr) != 2 {
-				return NewError("LLEN accepts exactly 1 arguments")
+				return fmt.Errorf("LLEN accepts exactly 1 arguments")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       LLEN,
@@ -141,11 +142,11 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 			}
 		case "LRANGE":
 			if len(cmd_arr) != 4 {
-				return NewError("LRANGE accepts exactly 3 arguments")
+				return fmt.Errorf("LRANGE accepts exactly 3 arguments")
 			}
 			key, ok := cmd_arr[1].(string)
 			if !ok {
-				return NewError("couldn't resolve key")
+				return fmt.Errorf("couldn't resolve key")
 			}
 			cmd_channel <- storage_cmd{
 				cmd:       LRANGE,
@@ -155,10 +156,10 @@ func handleCommand(cmd_arr []any, cmd_channel chan storage_cmd, con net.Conn) er
 				timestamp: time.Now(),
 			}
 		default:
-			return NewError("unrecognised cmd")
+			return fmt.Errorf("unrecognised cmd")
 		}
 	} else {
-		return NewError("cmd not of type string")
+		return fmt.Errorf("cmd not of type string")
 	}
 	return nil
 }
