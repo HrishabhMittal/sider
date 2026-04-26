@@ -17,6 +17,7 @@ const (
 	LRANGE
 	LLEN
 	LPOP
+	BLPOP
 )
 
 type storage_cmd struct {
@@ -33,152 +34,177 @@ type storage_obj struct {
 	expiry    time.Duration
 }
 
-//	func clamp(num int,low int,high int) int {
-//		if num < low {
-//			num = low
-//		} else if num > high {
-//			num = high
-//		}
-//		return num
-//	}
 func handleStorage(cmds chan storage_cmd) {
-	for v := range cmds {
-		switch v.cmd {
+	storage_cmd_len := make(map[string]chan struct{})
+	for cmd := range cmds {
+		switch cmd.cmd {
 		case GET:
-			val, ok := storage[v.key]
+			val, ok := storage[cmd.key]
 			if !ok {
-				v.to.Write([]byte(NULL_BULK_STRING))
-			} else if val.expiry > 0 && val.timestamp.Add(val.expiry).Compare(v.timestamp) != 1 {
-				delete(storage, v.key)
-				v.to.Write([]byte(NULL_BULK_STRING))
+				cmd.to.Write([]byte(NULL_BULK_STRING))
+			} else if val.expiry > 0 && val.timestamp.Add(val.expiry).Compare(cmd.timestamp) != 1 {
+				delete(storage, cmd.key)
+				cmd.to.Write([]byte(NULL_BULK_STRING))
 			} else {
 				str, _ := encodeObj(val.value)
-				v.to.Write([]byte(str))
+				cmd.to.Write([]byte(str))
 			}
 		case SET:
-			storage[v.key] = storage_obj{
-				value:     v.value,
-				timestamp: v.timestamp,
-				expiry:    v.expiry,
+			storage[cmd.key] = storage_obj{
+				value:     cmd.value,
+				timestamp: cmd.timestamp,
+				expiry:    cmd.expiry,
 			}
-			v.to.Write([]byte(encodeSimpleString("OK")))
+			cmd.to.Write([]byte(encodeSimpleString("OK")))
 		case LPUSH:
-			val, ok := storage[v.key]
+			val, ok := storage[cmd.key]
 			if !ok {
 				obj := []any{}
-				storage[v.key] = storage_obj{
+				storage[cmd.key] = storage_obj{
 					value:     obj,
-					timestamp: v.timestamp,
+					timestamp: cmd.timestamp,
 				}
 			}
-			val, ok = storage[v.key]
+			if storage_cmd_len[cmd.key] == nil {
+				storage_cmd_len[cmd.key] = make(chan struct{}, 1)
+			}
+			val, ok = storage[cmd.key]
 			if arr, ok := val.value.([]any); ok {
-				arg_arr := v.value.([]any)
+				arg_arr := cmd.value.([]any)
 				slices.Reverse(arg_arr)
-				arr = append(arg_arr, arr...)
-				obj, err := encodeObj(len(arr))
-				val.value = arr
-				storage[v.key] = val
-				if err != nil {
-					v.to.Write([]byte(encodeSimpleError("INTERNAL ERROR")))
-				} else {
-					v.to.Write([]byte(obj))
+				select {
+				case storage_cmd_len[cmd.key] <- struct{}{}:
+				default:
 				}
+				arr = append(arg_arr, arr...)
+				obj, _ := encodeObj(len(arr))
+				val.value = arr
+				storage[cmd.key] = val
+				cmd.to.Write([]byte(obj))
 			} else {
-				v.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
+				cmd.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
 			}
 		case RPUSH:
-			val, ok := storage[v.key]
+			val, ok := storage[cmd.key]
 			if !ok {
 				obj := []any{}
-				storage[v.key] = storage_obj{
+				storage[cmd.key] = storage_obj{
 					value:     obj,
-					timestamp: v.timestamp,
+					timestamp: cmd.timestamp,
 				}
 			}
-			val, ok = storage[v.key]
+			if storage_cmd_len[cmd.key] == nil {
+				storage_cmd_len[cmd.key] = make(chan struct{}, 1)
+			}
+			val, ok = storage[cmd.key]
 			if arr, ok := val.value.([]any); ok {
-				arr = append(arr, v.value.([]any)...)
-				obj, err := encodeObj(len(arr))
+				arr = append(arr, cmd.value.([]any)...)
+				obj, _ := encodeObj(len(arr))
 				val.value = arr
-				storage[v.key] = val
-				if err != nil {
-					v.to.Write([]byte(encodeSimpleError("INTERNAL ERROR")))
-				} else {
-					v.to.Write([]byte(obj))
+				storage[cmd.key] = val
+				select {
+				case storage_cmd_len[cmd.key] <- struct{}{}:
+				default:
 				}
+				cmd.to.Write([]byte(obj))
 			} else {
-				v.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
+				cmd.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
 			}
 		case LPOP:
-			val, ok := storage[v.key]
+			val, ok := storage[cmd.key]
 			if !ok {
-				v.to.Write([]byte(NULL_BULK_STRING))
+				cmd.to.Write([]byte(NULL_BULK_STRING))
 			} else {
 				optional := false
 				popped := 1
-				if arr, ok := v.value.([]any); ok {
+				if arr, ok := cmd.value.([]any); ok {
 					if len(arr) == 1 {
 						optional = true
 						popped_str, _ := arr[0].(string)
 						var err error
 						popped, err = strconv.Atoi(popped_str)
 						if err != nil {
-							v.to.Write([]byte(encodeSimpleError("OPTIONAL ARG COULDNT BE RESOLVED")))
+							cmd.to.Write([]byte(encodeSimpleError("OPTIONAL ARG COULDNT BE RESOLVED")))
 							continue
 						}
 					}
 				}
 				if arr, ok := val.value.([]any); ok {
-					if popped > len(arr) {
+					if popped >= len(arr) {
 						popped = len(arr)
+						select {
+						case <-storage_cmd_len[cmd.key]:
+						default:
+						}
 					}
 					if !optional {
 						obj, _ := encodeObj(arr[0])
-						v.to.Write([]byte(obj))
+						cmd.to.Write([]byte(obj))
 						val.value = arr[1:]
 					} else {
 						obj, _ := encodeObj(arr[0:popped])
-						v.to.Write([]byte(obj))
+						cmd.to.Write([]byte(obj))
 						val.value = arr[popped:]
 					}
-					storage[v.key] = val
+
+					if len(val.value.([]any)) == 0 {
+						delete(storage, cmd.key)
+					} else {
+						storage[cmd.key] = val
+					}
 				} else {
-					v.to.Write([]byte(NULL_BULK_STRING))
+					cmd.to.Write([]byte(NULL_BULK_STRING))
 				}
 			}
+		case BLPOP:
+			timeout := 0
+			if arr, ok := cmd.value.([]any); ok {
+				if len(arr) == 1 {
+					timeout_str, _ := arr[0].(string)
+					var err error
+					timeout, err = strconv.Atoi(timeout_str)
+					if err != nil {
+						cmd.to.Write([]byte(encodeSimpleError("OPTIONAL ARG COULDNT BE RESOLVED")))
+						continue
+					}
+				}
+			}
+			if storage_cmd_len[cmd.key] == nil {
+				storage_cmd_len[cmd.key] = make(chan struct{}, 1)
+			}
+			go handleBLPOP(cmd, timeout, storage_cmd_len[cmd.key], cmds)
 		case LLEN:
-			val, ok := storage[v.key]
+			val, ok := storage[cmd.key]
 			var l int
 			if !ok {
 				l = 0
 			} else {
-				if val, ok := val.value.([]any); ok {
-					l = len(val)
+				if val_arr, ok := val.value.([]any); ok {
+					l = len(val_arr)
 				} else {
 					l = 0
 				}
 			}
 			obj, err := encodeObj(l)
 			if err != nil {
-				v.to.Write([]byte(encodeSimpleError("ERROR WHILE HANDLING LLEN\n")))
+				cmd.to.Write([]byte(encodeSimpleError("ERROR WHILE HANDLING LLEN\n")))
 				continue
 			}
-			v.to.Write([]byte(obj))
+			cmd.to.Write([]byte(obj))
 		case LRANGE:
-			val, ok := storage[v.key]
+			val, ok := storage[cmd.key]
 			if !ok {
-				v.to.Write([]byte(EMPTY_ARR))
+				cmd.to.Write([]byte(EMPTY_ARR))
 				continue
 			}
-			low, err := strconv.Atoi(v.value.([]any)[0].(string))
+			low, err := strconv.Atoi(cmd.value.([]any)[0].(string))
 			if err != nil {
-				v.to.Write([]byte(encodeSimpleError("COULDNT CONVERT LOW TO INT")))
+				cmd.to.Write([]byte(encodeSimpleError("COULDNT CONVERT LOW TO INT")))
 				continue
 			}
-			high, err := strconv.Atoi(v.value.([]any)[1].(string))
+			high, err := strconv.Atoi(cmd.value.([]any)[1].(string))
 			if err != nil {
-				v.to.Write([]byte(encodeSimpleError("COULDNT CONVERT HIGH TO INT")))
+				cmd.to.Write([]byte(encodeSimpleError("COULDNT CONVERT HIGH TO INT")))
 				continue
 			}
 			if arr, ok := val.value.([]any); ok {
@@ -195,7 +221,7 @@ func handleStorage(cmds chan storage_cmd) {
 					high = 0
 				}
 				if low >= len(arr) || low > high {
-					v.to.Write([]byte(EMPTY_ARR))
+					cmd.to.Write([]byte(EMPTY_ARR))
 					continue
 				}
 				high += 1
@@ -204,15 +230,42 @@ func handleStorage(cmds chan storage_cmd) {
 				}
 				obj, err := encodeObj(arr[low:high])
 				if err != nil {
-					v.to.Write([]byte(encodeSimpleError("COULDNT ENCODE OBJECT")))
+					cmd.to.Write([]byte(encodeSimpleError("COULDNT ENCODE OBJECT")))
 					continue
 				}
-				v.to.Write([]byte(obj))
+				cmd.to.Write([]byte(obj))
 			} else {
-				v.to.Write([]byte("COULDNT DECODE ARRAY"))
+				cmd.to.Write([]byte("COULDNT DECODE ARRAY"))
 			}
 		default:
-			v.to.Write([]byte(NULL_BULK_STRING))
+			cmd.to.Write([]byte(NULL_BULK_STRING))
 		}
 	}
+}
+
+func handleBLPOP(cmd storage_cmd, timeout int, len_chan chan struct{}, main_cmds chan storage_cmd) {
+	if timeout == 0 {
+		<-len_chan
+	} else {
+		timer := time.NewTimer(time.Duration(timeout) * time.Second)
+		select {
+		case <-len_chan:
+			if !timer.Stop() {
+				<-timer.C
+			}
+		case <-timer.C:
+			cmd.to.Write([]byte(NULL_BULK_STRING))
+			return
+		}
+	}
+
+	select {
+	case len_chan <- struct{}{}:
+	default:
+	}
+
+	cmd.value = []any{}
+	cmd.cmd = LPOP
+
+	main_cmds <- cmd
 }
