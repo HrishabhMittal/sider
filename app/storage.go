@@ -35,7 +35,9 @@ type storage_obj struct {
 }
 
 func handleStorage(cmds chan storage_cmd) {
-	storage_cmd_len := make(map[string]chan struct{})
+
+	blocked_pops := make(map[string][]storage_cmd)
+
 	for cmd := range cmds {
 		switch cmd.cmd {
 		case GET:
@@ -65,22 +67,35 @@ func handleStorage(cmds chan storage_cmd) {
 					timestamp: cmd.timestamp,
 				}
 			}
-			if storage_cmd_len[cmd.key] == nil {
-				storage_cmd_len[cmd.key] = make(chan struct{}, 1)
-			}
 			val, ok = storage[cmd.key]
 			if arr, ok := val.value.([]any); ok {
 				arg_arr := cmd.value.([]any)
 				slices.Reverse(arg_arr)
-				select {
-				case storage_cmd_len[cmd.key] <- struct{}{}:
-				default:
-				}
 				arr = append(arg_arr, arr...)
+
 				obj, _ := encodeObj(len(arr))
 				val.value = arr
 				storage[cmd.key] = val
 				cmd.to.Write([]byte(obj))
+
+				for len(blocked_pops[cmd.key]) > 0 && len(storage[cmd.key].value.([]any)) > 0 {
+					b_cmd := blocked_pops[cmd.key][0]
+					blocked_pops[cmd.key] = blocked_pops[cmd.key][1:]
+
+					s_val := storage[cmd.key]
+					s_arr := s_val.value.([]any)
+					poppedValue := s_arr[0]
+					s_val.value = s_arr[1:]
+
+					if len(s_val.value.([]any)) == 0 {
+						delete(storage, cmd.key)
+					} else {
+						storage[cmd.key] = s_val
+					}
+
+					resp, _ := encodeObj([]any{b_cmd.key, poppedValue})
+					b_cmd.to.Write([]byte(resp))
+				}
 			} else {
 				cmd.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
 			}
@@ -93,20 +108,32 @@ func handleStorage(cmds chan storage_cmd) {
 					timestamp: cmd.timestamp,
 				}
 			}
-			if storage_cmd_len[cmd.key] == nil {
-				storage_cmd_len[cmd.key] = make(chan struct{}, 1)
-			}
 			val, ok = storage[cmd.key]
 			if arr, ok := val.value.([]any); ok {
 				arr = append(arr, cmd.value.([]any)...)
 				obj, _ := encodeObj(len(arr))
 				val.value = arr
 				storage[cmd.key] = val
-				select {
-				case storage_cmd_len[cmd.key] <- struct{}{}:
-				default:
-				}
 				cmd.to.Write([]byte(obj))
+
+				for len(blocked_pops[cmd.key]) > 0 && len(storage[cmd.key].value.([]any)) > 0 {
+					b_cmd := blocked_pops[cmd.key][0]
+					blocked_pops[cmd.key] = blocked_pops[cmd.key][1:]
+
+					s_val := storage[cmd.key]
+					s_arr := s_val.value.([]any)
+					poppedValue := s_arr[0]
+					s_val.value = s_arr[1:]
+
+					if len(s_val.value.([]any)) == 0 {
+						delete(storage, cmd.key)
+					} else {
+						storage[cmd.key] = s_val
+					}
+
+					resp, _ := encodeObj([]any{b_cmd.key, poppedValue})
+					b_cmd.to.Write([]byte(resp))
+				}
 			} else {
 				cmd.to.Write([]byte(encodeSimpleString("TYPE ERROR")))
 			}
@@ -132,10 +159,6 @@ func handleStorage(cmds chan storage_cmd) {
 				if arr, ok := val.value.([]any); ok {
 					if popped >= len(arr) {
 						popped = len(arr)
-						select {
-						case <-storage_cmd_len[cmd.key]:
-						default:
-						}
 					}
 					if !optional {
 						obj, _ := encodeObj(arr[0])
@@ -169,10 +192,27 @@ func handleStorage(cmds chan storage_cmd) {
 					}
 				}
 			}
-			if storage_cmd_len[cmd.key] == nil {
-				storage_cmd_len[cmd.key] = make(chan struct{}, 1)
+			_ = timeout
+
+			val, ok := storage[cmd.key]
+			if ok {
+
+				if arr, isArr := val.value.([]any); isArr && len(arr) > 0 {
+					poppedValue := arr[0]
+					val.value = arr[1:]
+					if len(val.value.([]any)) == 0 {
+						delete(storage, cmd.key)
+					} else {
+						storage[cmd.key] = val
+					}
+
+					obj, _ := encodeObj([]any{cmd.key, poppedValue})
+					cmd.to.Write([]byte(obj))
+					continue
+				}
 			}
-			go handleBLPOP(cmd, timeout, storage_cmd_len[cmd.key], cmds)
+
+			blocked_pops[cmd.key] = append(blocked_pops[cmd.key], cmd)
 		case LLEN:
 			val, ok := storage[cmd.key]
 			var l int
@@ -241,31 +281,4 @@ func handleStorage(cmds chan storage_cmd) {
 			cmd.to.Write([]byte(NULL_BULK_STRING))
 		}
 	}
-}
-
-func handleBLPOP(cmd storage_cmd, timeout int, len_chan chan struct{}, main_cmds chan storage_cmd) {
-	if timeout == 0 {
-		<-len_chan
-	} else {
-		timer := time.NewTimer(time.Duration(timeout) * time.Second)
-		select {
-		case <-len_chan:
-			if !timer.Stop() {
-				<-timer.C
-			}
-		case <-timer.C:
-			cmd.to.Write([]byte(NULL_BULK_STRING))
-			return
-		}
-	}
-
-	select {
-	case len_chan <- struct{}{}:
-	default:
-	}
-
-	cmd.value = []any{}
-	cmd.cmd = LPOP
-
-	main_cmds <- cmd
 }
