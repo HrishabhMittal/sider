@@ -18,6 +18,7 @@ const (
 	LLEN
 	LPOP
 	BLPOP
+	BLPOP_TIMEOUT
 )
 
 type storage_cmd struct {
@@ -28,15 +29,21 @@ type storage_cmd struct {
 	timestamp time.Time
 	expiry    time.Duration
 }
+
 type storage_obj struct {
 	value     any
 	timestamp time.Time
 	expiry    time.Duration
 }
 
-func handleStorage(cmds chan storage_cmd) {
+type blocked_client struct {
+	cmd storage_cmd
+	id  uint64
+}
 
-	blocked_pops := make(map[string][]storage_cmd)
+func handleStorage(cmds chan storage_cmd) {
+	blocked_pops := make(map[string][]blocked_client)
+	var next_id uint64 = 0
 
 	for cmd := range cmds {
 		switch cmd.cmd {
@@ -79,8 +86,9 @@ func handleStorage(cmds chan storage_cmd) {
 				cmd.to.Write([]byte(obj))
 
 				for len(blocked_pops[cmd.key]) > 0 && len(storage[cmd.key].value.([]any)) > 0 {
-					b_cmd := blocked_pops[cmd.key][0]
+					b_client := blocked_pops[cmd.key][0]
 					blocked_pops[cmd.key] = blocked_pops[cmd.key][1:]
+					b_cmd := b_client.cmd
 
 					s_val := storage[cmd.key]
 					s_arr := s_val.value.([]any)
@@ -117,8 +125,9 @@ func handleStorage(cmds chan storage_cmd) {
 				cmd.to.Write([]byte(obj))
 
 				for len(blocked_pops[cmd.key]) > 0 && len(storage[cmd.key].value.([]any)) > 0 {
-					b_cmd := blocked_pops[cmd.key][0]
+					b_client := blocked_pops[cmd.key][0]
 					blocked_pops[cmd.key] = blocked_pops[cmd.key][1:]
+					b_cmd := b_client.cmd
 
 					s_val := storage[cmd.key]
 					s_arr := s_val.value.([]any)
@@ -180,23 +189,21 @@ func handleStorage(cmds chan storage_cmd) {
 				}
 			}
 		case BLPOP:
-			timeout := 0
+			timeout := 0.0
 			if arr, ok := cmd.value.([]any); ok {
 				if len(arr) == 1 {
 					timeout_str, _ := arr[0].(string)
 					var err error
-					timeout, err = strconv.Atoi(timeout_str)
+					timeout, err = strconv.ParseFloat(timeout_str, 64)
 					if err != nil {
 						cmd.to.Write([]byte(encodeSimpleError("OPTIONAL ARG COULDNT BE RESOLVED")))
 						continue
 					}
 				}
 			}
-			_ = timeout
 
 			val, ok := storage[cmd.key]
 			if ok {
-
 				if arr, isArr := val.value.([]any); isArr && len(arr) > 0 {
 					poppedValue := arr[0]
 					val.value = arr[1:]
@@ -212,7 +219,37 @@ func handleStorage(cmds chan storage_cmd) {
 				}
 			}
 
-			blocked_pops[cmd.key] = append(blocked_pops[cmd.key], cmd)
+			next_id++
+			current_id := next_id
+			blocked_pops[cmd.key] = append(blocked_pops[cmd.key], blocked_client{cmd: cmd, id: current_id})
+
+			if timeout > 0 {
+				go func(c storage_cmd, id uint64, t float64) {
+					time.Sleep(time.Duration(t * float64(time.Second)))
+					cmds <- storage_cmd{
+						cmd:   BLPOP_TIMEOUT,
+						key:   c.key,
+						value: id,
+						to:    c.to,
+					}
+				}(cmd, current_id, timeout)
+			}
+		case BLPOP_TIMEOUT:
+			id := cmd.value.(uint64)
+			queue := blocked_pops[cmd.key]
+			found_idx := -1
+
+			for i, bc := range queue {
+				if bc.id == id {
+					found_idx = i
+					break
+				}
+			}
+
+			if found_idx != -1 {
+				blocked_pops[cmd.key] = append(queue[:found_idx], queue[found_idx+1:]...)
+				cmd.to.Write([]byte(NULL_ARR))
+			}
 		case LLEN:
 			val, ok := storage[cmd.key]
 			var l int
